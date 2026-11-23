@@ -1,6 +1,5 @@
 package se.exempel.avstamning.app.config
 
-import jakarta.validation.constraints.NotBlank
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.validation.annotation.Validated
 import java.net.URI
@@ -9,7 +8,6 @@ import java.time.Duration
 @Validated
 @ConfigurationProperties("avstamning")
 data class AvstamningsProperties(
-    @field:NotBlank val affarsreferens: String,
     val fixedDelay: Duration,
     val initialDelay: Duration,
     val http: Http,

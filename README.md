@@ -1,6 +1,6 @@
 # Avstämning av tre källsystem
 
-En liten Kotlin-mikrotjänst som hämtar kunduppgifter från exakt tre separata HTTP-API:er, jämför dem och sparar avvikelser i PostgreSQL. Ett schemalagt jobb driver avstämningen. `GET /api/felkoder` visar samtliga redan sparade felregistreringar och startar ingen ny jämförelse.
+En liten Kotlin-mikrotjänst som hämtar kunduppgifter från exakt tre separata HTTP-API:er, jämför dem och sparar avvikelser i PostgreSQL. Ett schemalagt jobb läser nästa kunduppdrag från tabellen `que` och driver avstämningen. `GET /api/felkoder` visar samtliga redan sparade felregistreringar och startar ingen ny jämförelse.
 
 Demons verksamhetsantagande är att samma kund har ett gemensamt **kundnummer** i alla tre systemen, men ett eget lokalt `refId` i varje system. Endast **namn** och **e-post** jämförs. Detta är en föreslagen demonstrationsdomän som behöver valideras mot verksamheten inför riktig användning.
 
@@ -24,8 +24,17 @@ set +a
 ./mvnw spring-boot:run
 ```
 
-Applikationen använder port 8080. Liquibase skapar tabellen `felkoder` i databasen med samma namn. Hibernate validerar schemat (`ddl-auto: validate`). Första jämförelsen körs efter fem sekunder; nästa körs 30 sekunder efter att den föregående avslutats. HTTP-anropen är sekventiella, med två sekunders anslutningstimeout och tre sekunders lästimeout per källa. Inga automatiska återförsök görs; nästa schemalagda körning gör ett nytt försök med ett nytt jämförelse-id.
+Applikationen använder port 8080. Liquibase skapar tabellerna `felkoder` och `que` i databasen `felkoder`. Hibernate validerar schemat (`ddl-auto: validate`). Workern triggar `AvstamningsService.stamAv()` utan argument efter fem sekunder och därefter 30 sekunder efter föregående avslut. Servicen läser högst ett väntande kunduppdrag per körning. Är kön tom görs inga HTTP-anrop.
 
+När applikationen har startat kan du lägga ett uppdrag i kön från en annan terminal:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+INSERT INTO que (affarsreferens) VALUES ('KUND-100');
+SQL
+```
+
+Kundreferensen kommer från köposten. Servicen startar de tre HTTP-anropen parallellt i en separat trådpool med tre trådar och inväntar samtliga svar innan domänen jämför dem. Varje klient har två sekunders anslutningstimeout och tre sekunders lästimeout. Inga automatiska återförsök görs inom ett HTTP-anrop.
 ```bash
 curl http://localhost:8080/api/felkoder
 ```
@@ -45,17 +54,17 @@ Stoppa infrastrukturen med `docker compose down`. Databasen bevaras i en namngiv
 
 ## Databasmigrationer med Liquibase
 
-`src/main/resources/db/changelog/db.changelog-master.yaml` inkluderar migrationerna i explicit ordning. Den första filen, `changes/001-skapa-felkoder.sql`, innehåller ett SQL-changeset som skapar tabellen, dess constraints och index. Liquibase kör nya changesets vid applikationsstart och registrerar dem i `databasechangelog`; `databasechangeloglock` samordnar migrationerna.
+`src/main/resources/db/changelog/db.changelog-master.yaml` inkluderar migrationerna i explicit ordning. Den första filen, `changes/001-skapa-felkoder.sql`, skapar felregistret. `changes/002-skapa-que.sql` lägger till kön med constraints och index, även för databaser som redan har första changesetet. Liquibase kör nya changesets vid applikationsstart och registrerar dem i `databasechangelog`; `databasechangeloglock` samordnar migrationerna.
 
 Lägg framtida ändringar i nya SQL-filer med egna changeset-id:n och inkludera dem sist i master-changelogen. Ändra inte redan körda changesets. Hibernate ansvarar för persistens och schemavalidering, medan Liquibase ansvarar för schemaändringarna.
 
-Den första changelogen är avsedd för en tom databas. Om du redan har startat den tidigare Flyway-versionen känner Liquibase inte till dess migrationshistorik. Använd då en ny demodatabas eller gör en kontrollerad baslinjemarkering med Liquibase `changelog-sync` efter att ha verifierat att det befintliga schemat motsvarar den första changelogen. Ingen automatisk baslinjemarkering eller radering av befintliga data görs.
+Den första changelogen är avsedd för en tom databas. Om du redan har startat den tidigare Flyway-versionen känner Liquibase inte till dess migrationshistorik. Använd då en ny demodatabas eller gör en kontrollerad baslinjemarkering av enbart `001-skapa-felkoder.sql` efter att ha verifierat att det befintliga schemat motsvarar den migrationen. Markera inte det nya changesetet för `que` som kört; det måste appliceras av Liquibase. Ingen automatisk baslinjemarkering eller radering av befintliga data görs.
 
 ## Jämförelseregler och demoscenarier
 
 Fälten jämförs med exakt stränglikhet. Mellanslag, versaler och andra skillnader bevaras; inga värden trimmas eller normaliseras. Källsystem, lokala referenser och kundnummer används för identitet och spårbarhet, inte som jämförelsefält. Obligatoriska uppgifter måste finnas och innehålla annat än blanktecken.
 
-Ingen källa är facit. Om ett fält skiljer sig sparas **en rad för varje involverat system**, även när två av tre har samma värde. Därmed anges ingen källa som den felaktiga. Alla rader från samma körning har samma `jamforelseId` och tidsstämpel. Kodvärdet `AVVIKANDE_FALT` bestäms av domänen. Själva namn- och e-postvärdena sparas inte i felregistret.
+Ingen källa är facit. Om ett fält skiljer sig sparas **en rad för varje involverat system**, även när två av tre har samma värde. Därmed anges ingen källa som den felaktiga. Alla felrader från samma köuppdrag har samma `jamforelseId` och tidsstämpel. `jamforelseId` är köpostens `id`, så resultatet går att koppla till uppdraget. Kodvärdet `AVVIKANDE_FALT` bestäms av domänen. Själva namn- och e-postvärdena sparas inte i felregistret.
 
 | Kundnummer | Underlag i demon | Utlåtande | Nya rader per körning |
 | --- | --- | --- | --- |
@@ -63,16 +72,33 @@ Ingen källa är facit. Om ett fält skiljer sig sparas **en rad för varje invo
 | `KUND-200` | Alla tre har samma namn och e-post, men olika lokala id:n | `LIKA` | 0 |
 | `KUND-300` | C svarar 404; A och B har dessutom olika namn | `OFULLSTANDIGT` | 0 |
 
-Byt scenario genom att stoppa applikationen och ange en annan kundreferens innan nästa start:
+Välj kund genom värdet i `INSERT INTO que`, eller köa alla tre demoscenarier:
 
 ```bash
-export AVSTAMNING_AFFARSREFERENS=KUND-200
-./mvnw spring-boot:run
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < demo/lagg-till-uppdrag.sql
 ```
 
-Byt till `KUND-300` på samma sätt för saknat underlag. En stoppad simulerad källa, timeout, andra HTTP-fel, tomt svar, ogiltigt svar eller fel kundnummer ger också `OFULLSTANDIGT`. Ofullständigt underlag ger inga avvikelseposter, även om två tillgängliga källor skiljer sig. Orsaken loggas separat per källa. Tidigare felregistreringar raderas inte.
+Varje insert skapar ett nytt uppdrag. De behandlas ett i taget, sorterade på `timestamp` och sedan `id`. Varje köpost innehåller `id`, `affarsreferens`, `status` och `timestamp`. Id, status och tidsstämpel får standardvärden i databasen.
 
-Varje körning loggar `jamforelseId` och utlåtande. `OLIKA` loggar även antalet sparade rader. Fel i lagringen loggas som en misslyckad körning, utan ett påstående om att avvikelser sparats. Namn och e-post skrivs inte till avstämningsloggarna.
+| Status i `que` | Innebörd |
+| --- | --- |
+| `VANTAR` | Väntar på nästa körning |
+| `KLART` | Jämförelsen är slutförd, oavsett om resultatet är `LIKA` eller `OLIKA` |
+| `MISSLYCKAT` | Underlaget är ofullständigt och inga felkoder har sparats |
+
+`KLART` och `MISSLYCKAT` väljs inte igen. För ett nytt försök lägger du en ny köpost för samma kund. En stoppad simulerad källa, timeout, HTTP-fel, tomt svar, ogiltigt svar eller fel kundnummer ger `OFULLSTANDIGT`. Även om två tillgängliga källor skiljer sig sparas då inga avvikelser. Tidigare felregistreringar raderas inte.
+
+Om databaslagringen misslyckas rullas både felkoderna och statusändringen tillbaka. Uppdraget ligger då kvar som `VANTAR` för nästa körning. Ett oväntat fel före slutförandet eller ett avbrott under hämtningen lämnar också uppdraget väntande. Ett kvarstående tekniskt fel kan därför blockera senare uppdrag i denna enkla kö.
+
+Varje behandlat uppdrag loggar `jamforelseId` och utlåtande. `OLIKA` loggar antalet sparade felkoder först efter lyckad commit. `OFULLSTANDIGT` loggar orsaken per källa. Fel i lagringen loggas som en misslyckad körning. Namn och e-post skrivs inte till avstämningsloggarna.
+
+Läs köstatus via databasen:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT id, affarsreferens, status, timestamp FROM que ORDER BY timestamp, id;
+SQL
+```
 
 ## Konfiguration och riktiga API:er
 
@@ -86,7 +112,6 @@ Miljövariabler åsidosätter standardvärdena i `application.yml`:
 | `SYSTEM_A_URL` | `http://localhost:8081` |
 | `SYSTEM_B_URL` | `http://localhost:8082` |
 | `SYSTEM_C_URL` | `http://localhost:8083` |
-| `AVSTAMNING_AFFARSREFERENS` | `KUND-100` |
 | `AVSTAMNING_FIXED_DELAY` | `PT30S` |
 | `AVSTAMNING_INITIAL_DELAY` | `PT5S` |
 | `HTTP_CONNECT_TIMEOUT` | `PT2S` |
@@ -111,18 +136,24 @@ Om riktiga API:er har andra kontrakt ändras respektive `System*Response`, `Syst
 api/controller, api/dto             Inkommande HTTP-adapter och response-mappning
 app/service                        Vanliga Kotlin-klasser för orkestrering och läsning
 app/port                           Utgående kontrakt som applikationen äger
-app/config                         Spring-wiring, käll-URL:er och timeouter
+app/config                         Spring-wiring, trådpool, käll-URL:er och timeouter
 app/scheduler                      Tunn Spring @Scheduled-trigger som bara anropar Service
 domain                             Ren Kotlin: underlag, jämförelseregler och utfall
 integration/systema, systemb, systemc  Tre HTTP-klienter, externa DTO:er och mappers
-integration/persistence            JPA-entitet, repository, mapper och adapter
+integration/persistence            JPA-entities, repositories, mappers och adapters för felkoder och que
 ```
 
 Det avgränsade verksamhetsområdet är avstämning av kunduppgifter. Tjänsten äger avvikelseregistret men ingen kundmasterdata. MapStruct översätter alla tre externa formaten till `Kallunderlag` och även mellan domän, persistens och response-DTO. HTTP-DTO:er och JPA-entiteter passerar aldrig in i kärnan. Domänen använder varken Spring, JPA eller MapStruct. Samtliga faktiska tjänster har suffixet `Service`.
 
-`AvstamningsScheduler` gör endast ett anrop till `AvstamningsService` med den konfigurerade affärsreferensen. Servicen orkestrerar hämtning från alla tre källorna utan databastransaktion, låter domänobjektet `Jamforelse` avgöra utfallet och sparar vid behov via `Avvikelselagring`. Servicen sköter också resultatloggning och felhantering för körningen; ett lyckat utlåtande loggas först efter eventuell lagring. Jämförelsereglerna och valet av felkod ligger i domänen. Spring-transaktionen ligger på persistensadaptern: alla felregistreringar för samma jämförelse sparas atomiskt. Tabellens unika villkor för `(jamforelse_id, falt, system_id)` hindrar dubbla registreringar inom en körning. Nya körningar får nya UUID:n och kan därför spara nya historikrader för samma kvarstående avvikelse.
+`AvstamningsScheduler` gör endast ett argumentlöst anrop till `AvstamningsService`. Servicen läser ett `Avstamningsuppdrag` via porten `Avstamningsko` och använder dess affärsreferens för alla tre källanrop. `QueMapper` översätter köpostens entity till domänobjektet. Ingen kundreferens finns i workern eller applikationskonfigurationen.
 
-Demotjänsten ska köras i **en instans**. Schemaläggaren använder en tråd och `fixedDelay`, så nästa körning startar efter föregående avslut. Ingen distribuerad låsning finns. Innan flera repliker används behövs ett medvetet beslut om ensam jobbägare eller distribuerad schemaläggning.
+Servicen orkestrerar parallell hämtning och väntar på alla tre resultaten. Domänobjektet `Jamforelse` ansvarar för jämförelsereglerna; `Avvikelse` bestämmer felkoden. Servicen sköter resultatloggning och felhantering för körningen. Trådpoolens livscykel hanteras av Spring. Vid avbrott återställs trådens interrupt-status och ingen jämförelse görs av ett delvis hämtat underlag.
+
+Köläsningen sker i en kort transaktion som avslutas före HTTP-anropen. `QuePersistenceAdapter.slutfor` låser den väntande köposten och sparar felkoder samt statusen `KLART` i en gemensam kort transaktion. Där anropas `Avvikelselagring`, vars transaktion ansluter till den pågående. Därmed kan köposten inte markeras klar utan att felkoderna sparats, eller tvärtom. Ofullständigt underlag uppdaterar endast statusen till `MISSLYCKAT`. Inga databaslås eller databastransaktioner hålls öppna under HTTP-anropen.
+
+Tabellens unika villkor för `(jamforelse_id, falt, system_id)` hindrar dubbla felregistreringar inom samma uppdrag. Ett nytt uppdrag får ett nytt UUID och kan spara ny historik för samma kvarstående avvikelse.
+
+Demotjänsten ska köras i **en instans**. Schemaläggaren använder en tråd och `fixedDelay`, så nästa jobb startar efter föregående avslut. De tre HTTP-anropen inom ett jobb körs parallellt. Köposten reserveras inte före hämtningen, så flera repliker kan göra samma externa anrop. Innan flera repliker används behövs reservation av köposter eller distribuerad schemaläggning.
 
 ## Versionsval
 

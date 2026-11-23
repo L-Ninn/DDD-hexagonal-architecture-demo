@@ -25,7 +25,6 @@ server:
   port: ${SERVER_PORT:8080}
 
 avstamning:
-  affarsreferens: ${AVSTAMNING_AFFARSREFERENS:KUND-100}
   fixed-delay: ${AVSTAMNING_FIXED_DELAY:PT30S}
   initial-delay: ${AVSTAMNING_INITIAL_DELAY:PT5S}
   http:

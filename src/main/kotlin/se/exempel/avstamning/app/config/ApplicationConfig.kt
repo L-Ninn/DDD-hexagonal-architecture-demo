@@ -6,11 +6,12 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.scheduling.annotation.EnableScheduling
 import org.springframework.web.client.RestClient
-import se.exempel.avstamning.app.port.Avvikelselagring
+import se.exempel.avstamning.app.port.Avstamningsko
 import se.exempel.avstamning.app.port.FelkodQueryPort
 import se.exempel.avstamning.app.port.Underlagshamtning
 import se.exempel.avstamning.app.service.AvstamningsService
 import se.exempel.avstamning.app.service.FelkodService
+import se.exempel.avstamning.domain.Kallsystem
 import se.exempel.avstamning.integration.systema.SystemAClient
 import se.exempel.avstamning.integration.systema.SystemAMapper
 import se.exempel.avstamning.integration.systemb.SystemBClient
@@ -19,6 +20,8 @@ import se.exempel.avstamning.integration.systemc.SystemCClient
 import se.exempel.avstamning.integration.systemc.SystemCMapper
 import java.net.URI
 import java.time.Clock
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -27,12 +30,16 @@ class ApplicationConfig {
     @Bean
     fun clock(): Clock = Clock.systemUTC()
 
+    @Bean(destroyMethod = "close")
+    fun underlagsExecutor(): ExecutorService = Executors.newFixedThreadPool(Kallsystem.entries.size)
+
     @Bean
     fun avstamningsService(
         underlagshamtningar: List<Underlagshamtning>,
-        avvikelselagring: Avvikelselagring,
+        avstamningsko: Avstamningsko,
         clock: Clock,
-    ) = AvstamningsService(underlagshamtningar, avvikelselagring, clock)
+        underlagsExecutor: ExecutorService,
+    ) = AvstamningsService(underlagshamtningar, avstamningsko, clock, underlagsExecutor)
 
     @Bean
     fun felkodService(felkodQueryPort: FelkodQueryPort) = FelkodService(felkodQueryPort)
