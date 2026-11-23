@@ -13,8 +13,9 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
-  flyway:
+  liquibase:
     enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml
   task:
     scheduling:
       pool:

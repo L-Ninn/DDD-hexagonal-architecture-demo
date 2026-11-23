@@ -24,7 +24,7 @@ set +a
 ./mvnw spring-boot:run
 ```
 
-Applikationen använder port 8080. Flyway skapar tabellen `felkoder` i databasen med samma namn. Hibernate validerar schemat (`ddl-auto: validate`). Första jämförelsen körs efter fem sekunder; nästa körs 30 sekunder efter att den föregående avslutats. HTTP-anropen är sekventiella, med två sekunders anslutningstimeout och tre sekunders lästimeout per källa. Inga automatiska återförsök görs; nästa schemalagda körning gör ett nytt försök med ett nytt jämförelse-id.
+Applikationen använder port 8080. Liquibase skapar tabellen `felkoder` i databasen med samma namn. Hibernate validerar schemat (`ddl-auto: validate`). Första jämförelsen körs efter fem sekunder; nästa körs 30 sekunder efter att den föregående avslutats. HTTP-anropen är sekventiella, med två sekunders anslutningstimeout och tre sekunders lästimeout per källa. Inga automatiska återförsök görs; nästa schemalagda körning gör ett nytt försök med ett nytt jämförelse-id.
 
 ```bash
 curl http://localhost:8080/api/felkoder
@@ -42,6 +42,14 @@ java -jar target/avstamning-0.0.1-SNAPSHOT.jar
 Projektet innehåller inga tester eller testberoenden, enligt önskemål. `maven.test.skip=true` är satt i POM. En lyckad kompilering bevisar inte HTTP-, databas- eller schemaläggningsbeteendet.
 
 Stoppa infrastrukturen med `docker compose down`. Databasen bevaras i en namngiven volym mellan omstarter. Historiken visas därför även när en senare jämförelse är lika eller ofullständig. `docker compose down -v` raderar den lokala demodatabasen och dess historik.
+
+## Databasmigrationer med Liquibase
+
+`src/main/resources/db/changelog/db.changelog-master.yaml` inkluderar migrationerna i explicit ordning. Den första filen, `changes/001-skapa-felkoder.sql`, innehåller ett SQL-changeset som skapar tabellen, dess constraints och index. Liquibase kör nya changesets vid applikationsstart och registrerar dem i `databasechangelog`; `databasechangeloglock` samordnar migrationerna.
+
+Lägg framtida ändringar i nya SQL-filer med egna changeset-id:n och inkludera dem sist i master-changelogen. Ändra inte redan körda changesets. Hibernate ansvarar för persistens och schemavalidering, medan Liquibase ansvarar för schemaändringarna.
+
+Den första changelogen är avsedd för en tom databas. Om du redan har startat den tidigare Flyway-versionen känner Liquibase inte till dess migrationshistorik. Använd då en ny demodatabas eller gör en kontrollerad baslinjemarkering med Liquibase `changelog-sync` efter att ha verifierat att det befintliga schemat motsvarar den första changelogen. Ingen automatisk baslinjemarkering eller radering av befintliga data görs.
 
 ## Jämförelseregler och demoscenarier
 
@@ -118,6 +126,6 @@ Demotjänsten ska köras i **en instans**. Schemaläggaren använder en tråd oc
 
 ## Versionsval
 
-Java 21, Spring Boot 3.5.7, Kotlin 1.9.25 (Boots dependency management), MapStruct 1.6.3 med kapt, Hibernate 6.6.33.Final, Flyway 11.7.2, PostgreSQL 17.6 och WireMock 3.13.2. Spring Boot hanterar Kotlin-, Hibernate-, Flyway- och JDBC-versionerna. Kotlin-kompilatorns Spring/JPA-plugins öppnar ramverksklasser och skapar JPA-konstruktorn; domänens dataklasser är immutabla. Endast MapStructs genererade implementationer är Java-kod.
+Java 21, Spring Boot 3.5.7, Kotlin 1.9.25 (Boots dependency management), MapStruct 1.6.3 med kapt, Hibernate 6.6.33.Final, Liquibase 4.31.1, PostgreSQL 17.6 och WireMock 3.13.2. Spring Boot hanterar Kotlin-, Hibernate-, Liquibase- och JDBC-versionerna. Kotlin-kompilatorns Spring/JPA-plugins öppnar ramverksklasser och skapar JPA-konstruktorn; domänens dataklasser är immutabla. Endast MapStructs genererade implementationer är Java-kod.
 
-Versions- och konfigurationsunderlag: [Spring Boot 3.5.7](https://spring.io/blog/2025/10/23/spring-boot-3-5-7-available-now/), [Spring Boots Kotlin-stöd](https://docs.spring.io/spring-boot/3.5/reference/features/kotlin.html), [Kotlin kapt med Maven](https://kotlinlang.org/docs/kapt.html), [MapStruct 1.6.3](https://mapstruct.org/documentation/stable/reference/html/), [PostgreSQL 17 constraints](https://www.postgresql.org/docs/17/ddl-constraints.html) och [WireMock i Docker](https://wiremock.org/docs/standalone/docker/).
+Versions- och konfigurationsunderlag: [Spring Boot 3.5.7](https://spring.io/blog/2025/10/23/spring-boot-3-5-7-available-now/), [Spring Boots Kotlin-stöd](https://docs.spring.io/spring-boot/3.5/reference/features/kotlin.html), [Liquibase med Spring Boot](https://docs.spring.io/spring-boot/3.5/how-to/data-initialization.html#howto.data-initialization.migration-tool.liquibase), [Kotlin kapt med Maven](https://kotlinlang.org/docs/kapt.html), [MapStruct 1.6.3](https://mapstruct.org/documentation/stable/reference/html/), [PostgreSQL 17 constraints](https://www.postgresql.org/docs/17/ddl-constraints.html) och [WireMock i Docker](https://wiremock.org/docs/standalone/docker/).

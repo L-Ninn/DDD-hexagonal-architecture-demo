@@ -1,3 +1,6 @@
+--liquibase formatted sql
+
+--changeset avstamning:001-skapa-felkoder
 CREATE TABLE felkoder (
     id UUID PRIMARY KEY,
     kod VARCHAR(40) NOT NULL,
