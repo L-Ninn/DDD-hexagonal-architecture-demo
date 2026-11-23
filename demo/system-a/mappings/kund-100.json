@@ -1,0 +1,13 @@
+{
+  "request": { "method": "GET", "urlPath": "/customers/KUND-100" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "id": "A-101",
+      "customerNumber": "KUND-100",
+      "name": "Demo Kund",
+      "email": "kund@example.invalid"
+    }
+  }
+}

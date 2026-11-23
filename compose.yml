@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: felkoder
+      POSTGRES_USER: ${POSTGRES_USER:-avstamning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Kopiera .env.example till .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - felkoder-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d felkoder"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  system-a:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${SYSTEM_A_PORT:-8081}:8080"
+    volumes:
+      - ./demo/system-a/mappings:/home/wiremock/mappings:ro
+
+  system-b:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${SYSTEM_B_PORT:-8082}:8080"
+    volumes:
+      - ./demo/system-b/mappings:/home/wiremock/mappings:ro
+
+  system-c:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${SYSTEM_C_PORT:-8083}:8080"
+    volumes:
+      - ./demo/system-c/mappings:/home/wiremock/mappings:ro
+
+volumes:
+  felkoder-data:

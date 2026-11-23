@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "GET", "urlPath": "/records",
+    "queryParameters": { "customerNumber": { "equalTo": "KUND-200" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "recordId": "B-902",
+      "customer": {
+        "number": "KUND-200",
+        "displayName": "Likadan Kund",
+        "contact": { "emailAddress": "likadan@example.invalid" }
+      }
+    }
+  }
+}

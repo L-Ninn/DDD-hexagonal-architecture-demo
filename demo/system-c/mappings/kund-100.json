@@ -1,0 +1,13 @@
+{
+  "request": { "method": "GET", "urlPath": "/customer-data/KUND-100" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "local_reference": "C-451",
+      "business_reference": "KUND-100",
+      "full_name": "Demo Kund",
+      "email_address": "annan-adress@example.invalid"
+    }
+  }
+}

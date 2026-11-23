@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "GET", "urlPath": "/records",
+    "queryParameters": { "customerNumber": { "equalTo": "KUND-300" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "recordId": "B-903",
+      "customer": {
+        "number": "KUND-300",
+        "displayName": "Annat Namn",
+        "contact": { "emailAddress": "ofullstandig@example.invalid" }
+      }
+    }
+  }
+}

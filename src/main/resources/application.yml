@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: avstamning
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/felkoder}
+    username: ${POSTGRES_USER:avstamning}
+    password: ${POSTGRES_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  task:
+    scheduling:
+      pool:
+        size: 1
+
+server:
+  port: ${SERVER_PORT:8080}
+
+avstamning:
+  affarsreferens: ${AVSTAMNING_AFFARSREFERENS:KUND-100}
+  fixed-delay: ${AVSTAMNING_FIXED_DELAY:PT30S}
+  initial-delay: ${AVSTAMNING_INITIAL_DELAY:PT5S}
+  http:
+    connect-timeout: ${HTTP_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${HTTP_READ_TIMEOUT:PT3S}
+  kallor:
+    system-a-url: ${SYSTEM_A_URL:http://localhost:8081}
+    system-b-url: ${SYSTEM_B_URL:http://localhost:8082}
+    system-c-url: ${SYSTEM_C_URL:http://localhost:8083}
