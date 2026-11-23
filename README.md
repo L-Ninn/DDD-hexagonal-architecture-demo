@@ -112,7 +112,7 @@ api/controller, api/dto             Inkommande HTTP-adapter och response-mappnin
 app/service                        Vanliga Kotlin-klasser för orkestrering och läsning
 app/port                           Utgående kontrakt som applikationen äger
 app/config                         Spring-wiring, käll-URL:er och timeouter
-app/scheduler                      Tekniskt undantag i app-paketet: Spring @Scheduled
+app/scheduler                      Tunn Spring @Scheduled-trigger som bara anropar Service
 domain                             Ren Kotlin: underlag, jämförelseregler och utfall
 integration/systema, systemb, systemc  Tre HTTP-klienter, externa DTO:er och mappers
 integration/persistence            JPA-entitet, repository, mapper och adapter
@@ -120,7 +120,7 @@ integration/persistence            JPA-entitet, repository, mapper och adapter
 
 Det avgränsade verksamhetsområdet är avstämning av kunduppgifter. Tjänsten äger avvikelseregistret men ingen kundmasterdata. MapStruct översätter alla tre externa formaten till `Kallunderlag` och även mellan domän, persistens och response-DTO. HTTP-DTO:er och JPA-entiteter passerar aldrig in i kärnan. Domänen använder varken Spring, JPA eller MapStruct. Samtliga faktiska tjänster har suffixet `Service`.
 
-`AvstamningsService` hämtar alla tre underlagen utan databastransaktion, låter `Jamforelse` avgöra utfallet och sparar vid behov via `Avvikelselagring`. Spring-transaktionen ligger på persistensadaptern: alla felregistreringar för samma jämförelse sparas atomiskt. Tabellens unika villkor för `(jamforelse_id, falt, system_id)` hindrar dubbla registreringar inom en körning. Nya körningar får nya UUID:n och kan därför spara nya historikrader för samma kvarstående avvikelse.
+`AvstamningsScheduler` gör endast ett anrop till `AvstamningsService` med den konfigurerade affärsreferensen. Servicen orkestrerar hämtning från alla tre källorna utan databastransaktion, låter domänobjektet `Jamforelse` avgöra utfallet och sparar vid behov via `Avvikelselagring`. Servicen sköter också resultatloggning och felhantering för körningen; ett lyckat utlåtande loggas först efter eventuell lagring. Jämförelsereglerna och valet av felkod ligger i domänen. Spring-transaktionen ligger på persistensadaptern: alla felregistreringar för samma jämförelse sparas atomiskt. Tabellens unika villkor för `(jamforelse_id, falt, system_id)` hindrar dubbla registreringar inom en körning. Nya körningar får nya UUID:n och kan därför spara nya historikrader för samma kvarstående avvikelse.
 
 Demotjänsten ska köras i **en instans**. Schemaläggaren använder en tråd och `fixedDelay`, så nästa körning startar efter föregående avslut. Ingen distribuerad låsning finns. Innan flera repliker används behövs ett medvetet beslut om ensam jobbägare eller distribuerad schemaläggning.
 
