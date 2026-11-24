@@ -90,7 +90,7 @@ Varje insert skapar ett nytt uppdrag. De behandlas ett i taget, sorterade på `t
 
 Om databaslagringen misslyckas rullas både felkoderna och statusändringen tillbaka. Uppdraget ligger då kvar som `VANTAR` för nästa körning. Ett oväntat fel före slutförandet eller ett avbrott under hämtningen lämnar också uppdraget väntande. Ett kvarstående tekniskt fel kan därför blockera senare uppdrag i denna enkla kö.
 
-Varje behandlat uppdrag loggar `jamforelseId` och utlåtande. `OLIKA` loggar antalet sparade felkoder först efter lyckad commit. `OFULLSTANDIGT` loggar orsaken per källa. Fel i lagringen loggas som en misslyckad körning. Namn och e-post skrivs inte till avstämningsloggarna.
+Servicen returnerar domänens jämförelseresultat, eller `null` om kön är tom. Köstatus och sparade felkoder visar utfallet när jobbet körs schemalagt. Servicen har ingen egen resultatloggning. Oväntade fel går vidare till Spring-schedulerns vanliga felhantering, som loggar felet och låter nästa schemalagda körning ske.
 
 Läs köstatus via databasen:
 
@@ -147,7 +147,7 @@ Det avgränsade verksamhetsområdet är avstämning av kunduppgifter. Tjänsten 
 
 `AvstamningsScheduler` gör endast ett argumentlöst anrop till `AvstamningsService`. Servicen läser ett `Avstamningsuppdrag` via porten `Avstamningsko` och använder dess affärsreferens för alla tre källanrop. `QueMapper` översätter köpostens entity till domänobjektet. Ingen kundreferens finns i workern eller applikationskonfigurationen.
 
-Servicen orkestrerar parallell hämtning och väntar på alla tre resultaten. Domänobjektet `Jamforelse` ansvarar för jämförelsereglerna; `Avvikelse` bestämmer felkoden. Servicen sköter resultatloggning och felhantering för körningen. Trådpoolens livscykel hanteras av Spring. Vid avbrott återställs trådens interrupt-status och ingen jämförelse görs av ett delvis hämtat underlag.
+Servicen orkestrerar parallell hämtning och väntar på alla tre resultaten. Domänobjektet `Jamforelse` ansvarar för jämförelsereglerna; `Avvikelse` bestämmer felkoden. Trådpoolens livscykel hanteras av Spring. Servicen fångar inte `InterruptedException`: avbrottet går vidare till anroparen och ingen jämförelse görs av ett delvis hämtat underlag.
 
 Köläsningen sker i en kort transaktion som avslutas före HTTP-anropen. `QuePersistenceAdapter.slutfor` låser den väntande köposten och sparar felkoder samt statusen `KLART` i en gemensam kort transaktion. Där anropas `Avvikelselagring`, vars transaktion ansluter till den pågående. Därmed kan köposten inte markeras klar utan att felkoderna sparats, eller tvärtom. Ofullständigt underlag uppdaterar endast statusen till `MISSLYCKAT`. Inga databaslås eller databastransaktioner hålls öppna under HTTP-anropen.
 

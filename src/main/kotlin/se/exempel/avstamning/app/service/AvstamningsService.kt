@@ -1,9 +1,7 @@
 package se.exempel.avstamning.app.service
 
-import org.slf4j.LoggerFactory
 import se.exempel.avstamning.app.port.Avstamningsko
 import se.exempel.avstamning.app.port.Underlagshamtning
-import se.exempel.avstamning.domain.Avstamningsuppdrag
 import se.exempel.avstamning.domain.Jamforelse
 import se.exempel.avstamning.domain.Jamforelseresultat
 import se.exempel.avstamning.domain.Kallsystem
@@ -19,8 +17,6 @@ class AvstamningsService(
     private val clock: Clock,
     private val underlagsExecutor: ExecutorService,
 ) {
-    private val logger = LoggerFactory.getLogger(javaClass)
-
     init {
         require(underlagshamtningar.size == Kallsystem.entries.size &&
             underlagshamtningar.map { it.systemId }.toSet() == Kallsystem.entries.toSet()) {
@@ -28,20 +24,8 @@ class AvstamningsService(
         }
     }
 
-    fun stamAv() {
-        try {
-            val uppdrag = avstamningsko.hamtaNasta() ?: return
-            val resultat = jamforOchSpara(uppdrag)
-            loggaResultat(resultat)
-        } catch (exception: InterruptedException) {
-            Thread.currentThread().interrupt()
-            logger.warn("Avstämningen avbröts; uppdraget ligger kvar i kön", exception)
-        } catch (exception: Exception) {
-            logger.error("Avstämningen misslyckades; inget jämförelseutlåtande kunde slutföras", exception)
-        }
-    }
-
-    private fun jamforOchSpara(uppdrag: Avstamningsuppdrag): Jamforelseresultat {
+    fun stamAv(): Jamforelseresultat? {
+        val uppdrag = avstamningsko.hamtaNasta() ?: return null
         val jamforelse = Jamforelse(uppdrag.id, uppdrag.affarsreferens, clock.instant())
         val hamtningar = underlagsExecutor.invokeAll(
             underlagshamtningar.map { hamtare -> Callable { hamtare.hamta(uppdrag.affarsreferens) } },
@@ -68,26 +52,5 @@ class AvstamningsService(
         } else emptyList()
         avstamningsko.slutfor(uppdrag.id, felkoder)
         return resultat
-    }
-
-    private fun loggaResultat(resultat: Jamforelseresultat) {
-        when (resultat) {
-            is Jamforelseresultat.Lika ->
-                logger.info("jamforelseId={} utlatande=LIKA", resultat.jamforelse.id)
-            is Jamforelseresultat.Olika ->
-                logger.info(
-                    "jamforelseId={} utlatande=OLIKA sparadeFelkoder={}",
-                    resultat.jamforelse.id, resultat.avvikelser.size,
-                )
-            is Jamforelseresultat.Ofullstandigt -> {
-                logger.warn("jamforelseId={} utlatande=OFULLSTANDIGT", resultat.jamforelse.id)
-                resultat.problem.forEach { problem ->
-                    logger.warn(
-                        "jamforelseId={} systemId={} underlagsproblem={}",
-                        resultat.jamforelse.id, problem.systemId, problem.orsak,
-                    )
-                }
-            }
-        }
     }
 }
