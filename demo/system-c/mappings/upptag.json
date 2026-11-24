@@ -1,0 +1,22 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "GET",
+        "urlPath": "/upptagsdata/C-3"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "local_reference": "C-3",
+          "upptags_id": "U-3",
+          "person_id": "19900909-3333",
+          "full_name": "Cia Carlsson"
+        }
+      }
+    }
+  ]
+}

@@ -7,8 +7,8 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import se.exempel.avstamning.domain.Felkod
-import se.exempel.avstamning.domain.Jamforelsefalt
-import se.exempel.avstamning.domain.Kallsystem
+import se.exempel.avstamning.domain.RegistreradFelkod
+import se.exempel.avstamning.domain.Upptagstjanst
 import java.time.Instant
 import java.util.UUID
 
@@ -19,27 +19,48 @@ class FelkodEntity(
     @Column(nullable = false, updatable = false)
     var id: UUID,
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, updatable = false, length = 40)
-    var kod: Felkod,
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "system_id", nullable = false, updatable = false, length = 20)
-    var systemId: Kallsystem,
-
-    @Column(name = "ref_id", nullable = false, updatable = false, columnDefinition = "text")
-    var refId: String,
-
-    @Column(name = "jamforelse_id", nullable = false, updatable = false)
-    var jamforelseId: UUID,
+    @Column(name = "kod_nummer", nullable = false, updatable = false)
+    var kodNummer: Int,
 
     @Column(nullable = false, updatable = false, columnDefinition = "text")
-    var affarsreferens: String,
+    var beskrivning: String,
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, updatable = false, length = 20)
-    var falt: Jamforelsefalt,
+    var tjanst: Upptagstjanst,
+
+    @Column(name = "uppdrag_id", nullable = false, updatable = false)
+    var uppdragId: UUID,
+
+    @Column(nullable = false, updatable = false, columnDefinition = "text")
+    var kallreferens: String,
+
+    @Column(name = "upptags_id", nullable = false, updatable = false, columnDefinition = "text")
+    var upptagsId: String,
 
     @Column(nullable = false, updatable = false, columnDefinition = "timestamptz")
-    var timestamp: Instant,
-)
+    var tidpunkt: Instant,
+) {
+    fun tillFelkod() = RegistreradFelkod(
+        id = id,
+        felkod = Felkod.franNummer(kodNummer),
+        tjanst = tjanst,
+        uppdragId = uppdragId,
+        kallreferens = kallreferens,
+        upptagsId = upptagsId,
+        tidpunkt = tidpunkt,
+    )
+
+    companion object {
+        fun fran(felkod: RegistreradFelkod) = FelkodEntity(
+            id = felkod.id,
+            kodNummer = felkod.felkod.nummer,
+            beskrivning = felkod.felkod.beskrivning,
+            tjanst = felkod.tjanst,
+            uppdragId = felkod.uppdragId,
+            kallreferens = felkod.kallreferens,
+            upptagsId = felkod.upptagsId,
+            tidpunkt = felkod.tidpunkt,
+        )
+    }
+}
