@@ -41,4 +41,4 @@ Förväntat: `A-1` inga felkoder, `B-2` felkod 3 (Y) och 2 (Z), `C-3` felkod 1 (
 ## Mer
 
 - [OVERLAMNING.md](OVERLAMNING.md) – status och nästa steg
-- [AI-PROMPT.md](AI-PROMPT.md) – prompt för att återskapa projektet från grunden
+- [AI-PROMPT.md](AI-PROMPT.md) – prompt för att återskapa projektet som en fristående Spring Boot-app mot MySQL

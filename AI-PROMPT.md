@@ -1,6 +1,6 @@
 # AI-prompt: återskapa Upptagskontroll
 
-Kopiera allt under linjen till AI-modellen. Prompten innehåller hela koden ordagrant, så att även en mindre modell kan återskapa projektet steg för steg.
+Kopiera allt under linjen till AI-modellen. Prompten innehåller hela koden ordagrant, så att även en mindre modell kan återskapa projektet steg för steg. Målet är en Spring Boot-app som startar mot MySQL – ingen Docker eller annan plattform behövs.
 
 ---
 
@@ -18,16 +18,16 @@ Du ska skapa ett Kotlin/Spring Boot-projekt som heter **Upptagskontroll**. Följ
 
 ## Regler
 
-- Kotlin, Java 21, Spring Boot 3.5.7, Maven, PostgreSQL, Liquibase, MapStruct 1.6.3 (via kapt).
+- Kotlin, Java 21, Spring Boot 3.5.7, Maven, MySQL 8, Liquibase, MapStruct 1.6.3 (via kapt).
 - Hexagonal arkitektur: `domain` får inte importera Spring, JPA eller MapStruct.
 - Inga tester. Minimal loggning och felhantering.
 - Svenska namn utan å, ä, ö i koden.
 - Alla Kotlin-filer ligger under `src/main/kotlin/se/exempel/avstamning/`.
-- Efter steg 2, 4 och 6: kör `./mvnw -q clean package`. Rätta kompileringsfel innan du går vidare. Ändra inte designen för att få det att kompilera – jämför i stället din fil med texten här.
+- Efter steg 2, 4 och 6: kör `mvn -q clean package`. Rätta kompileringsfel innan du går vidare. Ändra inte designen för att få det att kompilera – jämför i stället din fil med texten här.
 
-## Steg 1 – Byggfiler
+## Steg 1 – Byggfil
 
-Skapa `pom.xml` exakt så här. Skapa Maven Wrapper med `mvn -N wrapper:wrapper -Dmaven=3.9.11` (eller installera Maven 3.9 och använd `mvn` i stället för `./mvnw`).
+Skapa `pom.xml` exakt så här. Bygg med Maven 3.9 eller senare, eller via din IDE.
 
 **`pom.xml`**
 
@@ -88,8 +88,8 @@ Skapa `pom.xml` exakt så här. Skapa Maven Wrapper med `mvn -N wrapper:wrapper 
             <artifactId>liquibase-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
     </dependencies>
@@ -684,7 +684,7 @@ class QueEntity(
     @Column(nullable = false, length = 20)
     var status: QueStatus,
 
-    @Column(nullable = false, updatable = false, columnDefinition = "timestamptz")
+    @Column(nullable = false, updatable = false)
     var timestamp: Instant,
 ) {
     fun tillUppdrag() = Kontrolluppdrag(id, kallreferens, Kallsystem.franTopic(topic))
@@ -787,7 +787,7 @@ class FelkodEntity(
     @Column(name = "upptags_id", nullable = false, updatable = false, columnDefinition = "text")
     var upptagsId: String,
 
-    @Column(nullable = false, updatable = false, columnDefinition = "timestamptz")
+    @Column(nullable = false, updatable = false)
     var tidpunkt: Instant,
 ) {
     fun tillFelkod() = RegistreradFelkod(
@@ -1043,7 +1043,7 @@ fun main(args: Array<String>) {
 }
 ```
 
-## Steg 7 – Resurser och databas
+## Steg 7 – Konfiguration och databas (MySQL)
 
 
 **`src/main/resources/application.yml`**
@@ -1051,11 +1051,11 @@ fun main(args: Array<String>) {
 ```yaml
 spring:
   application:
-    name: avstamning
+    name: upptagskontroll
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/felkoder}
-    username: ${POSTGRES_USER:avstamning}
-    password: ${POSTGRES_PASSWORD}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/upptagskontroll?createDatabaseIfNotExist=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
   jpa:
     open-in-view: false
     hibernate:
@@ -1108,11 +1108,11 @@ databaseChangeLog:
 
 --changeset upptagskontroll:001-skapa-tabeller
 CREATE TABLE que (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BINARY(16) NOT NULL DEFAULT (UUID_TO_BIN(UUID())) PRIMARY KEY,
     kallreferens TEXT NOT NULL,
     topic VARCHAR(40) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'VANTAR',
-    timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    timestamp DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     CONSTRAINT que_topic CHECK (topic IN ('system-a', 'system-b', 'system-c')),
     CONSTRAINT que_status CHECK (status IN ('VANTAR', 'KLART', 'MISSLYCKAT'))
 );
@@ -1120,14 +1120,15 @@ CREATE TABLE que (
 CREATE INDEX que_status_timestamp_id_idx ON que (status, timestamp, id);
 
 CREATE TABLE felkoder (
-    id UUID PRIMARY KEY,
+    id BINARY(16) NOT NULL PRIMARY KEY,
     kod_nummer INTEGER NOT NULL,
     beskrivning TEXT NOT NULL,
     tjanst VARCHAR(20) NOT NULL,
-    uppdrag_id UUID NOT NULL REFERENCES que (id),
+    uppdrag_id BINARY(16) NOT NULL,
     kallreferens TEXT NOT NULL,
     upptags_id TEXT NOT NULL,
-    tidpunkt TIMESTAMPTZ NOT NULL,
+    tidpunkt DATETIME(6) NOT NULL,
+    CONSTRAINT felkoder_uppdrag FOREIGN KEY (uppdrag_id) REFERENCES que (id),
     CONSTRAINT felkoder_kod_nummer CHECK (kod_nummer BETWEEN 1 AND 20),
     CONSTRAINT felkoder_tjanst CHECK (tjanst IN ('TJANST_X', 'TJANST_Y', 'TJANST_Z'))
 );
@@ -1135,154 +1136,21 @@ CREATE TABLE felkoder (
 CREATE INDEX felkoder_tidpunkt_id_idx ON felkoder (tidpunkt DESC, id ASC);
 ```
 
-## Steg 8 – Lokal demomiljö
+## Steg 8 – Starta appen
 
-Skapa `.gitignore` med raderna `target/`, `.idea/`, `.env`.
-
-**`compose.yml`**
-
-```yaml
-services:
-  postgres:
-    image: postgres:17.6-alpine
-    environment:
-      POSTGRES_DB: felkoder
-      POSTGRES_USER: ${POSTGRES_USER:-avstamning}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Kopiera .env.example till .env}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - felkoder-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d felkoder"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  system-a:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${SYSTEM_A_PORT:-8081}:8080"
-    volumes:
-      - ./demo/system-a/mappings:/home/wiremock/mappings:ro
-
-  system-b:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${SYSTEM_B_PORT:-8082}:8080"
-    volumes:
-      - ./demo/system-b/mappings:/home/wiremock/mappings:ro
-
-  system-c:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${SYSTEM_C_PORT:-8083}:8080"
-    volumes:
-      - ./demo/system-c/mappings:/home/wiremock/mappings:ro
-
-  tjanst-x:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${TJANST_X_PORT:-8084}:8080"
-    volumes:
-      - ./demo/tjanst-x/mappings:/home/wiremock/mappings:ro
-
-  tjanst-y:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${TJANST_Y_PORT:-8085}:8080"
-    volumes:
-      - ./demo/tjanst-y/mappings:/home/wiremock/mappings:ro
-
-  tjanst-z:
-    image: wiremock/wiremock:3.13.2
-    ports:
-      - "127.0.0.1:${TJANST_Z_PORT:-8086}:8080"
-    volumes:
-      - ./demo/tjanst-z/mappings:/home/wiremock/mappings:ro
-
-volumes:
-  felkoder-data:
-```
-
-**`.env.example`**
+Förutsättning: JDK 21 och en MySQL 8-server på `localhost:3306`. Databasen `upptagskontroll` skapas automatiskt, och Liquibase skapar tabellerna vid start.
 
 ```bash
-# Enbart lokala demovarden. Kopiera till .env och byt vid behov.
-POSTGRES_USER=avstamning
-POSTGRES_PASSWORD=lokalt-demo-losenord
-POSTGRES_PORT=5432
-SYSTEM_A_PORT=8081
-SYSTEM_B_PORT=8082
-SYSTEM_C_PORT=8083
-TJANST_X_PORT=8084
-TJANST_Y_PORT=8085
-TJANST_Z_PORT=8086
+mvn clean package
+DB_USERNAME=root DB_PASSWORD=<ditt lösenord> java -jar target/avstamning-0.0.1-SNAPSHOT.jar
 ```
 
-**`demo/lagg-till-uppdrag.sql`**
-
-```sql
--- U-1: allt stämmer               -> inga felkoder
--- U-2: namn och person avviker     -> felkod 3 (tjänst Y) och 2 (tjänst Z)
--- U-3: annat upptagsid             -> felkod 1 (tjänst Y)
-INSERT INTO que (kallreferens, topic)
-VALUES ('A-1', 'system-a'), ('B-2', 'system-b'), ('C-3', 'system-c');
-```
-
-**`demo/system-a/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/upptag/A-1"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"id":"A-1","upptagsId":"U-1","person":{"personnummer":"19800101-1111","namn":"Anna Andersson"}}}}]}
-```
-
-**`demo/system-b/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/records","queryParameters":{"recordId":{"equalTo":"B-2"}}},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"recordId":"B-2","uptake":{"id":"U-2"},"subject":{"personalNumber":"19750505-2222","fullName":"Bo Berg"}}}}]}
-```
-
-**`demo/system-c/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/upptagsdata/C-3"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"local_reference":"C-3","upptags_id":"U-3","person_id":"19900909-3333","full_name":"Cia Carlsson"}}}]}
-```
-
-**`demo/tjanst-x/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/upptag/U-1"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-1","personId":"19800101-1111","namn":"Anna Andersson"}}},{"request":{"method":"GET","urlPath":"/upptag/U-2"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-2","personId":"19750505-2222","namn":"Bo Berg"}}},{"request":{"method":"GET","urlPath":"/upptag/U-3"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-3","personId":"19900909-3333","namn":"Cia Carlsson"}}}]}
-```
-
-**`demo/tjanst-y/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/upptag/U-1"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-1","personId":"19800101-1111","namn":"Anna Andersson"}}},{"request":{"method":"GET","urlPath":"/upptag/U-2"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-2","personId":"19750505-2222","namn":"Bo Bergström"}}},{"request":{"method":"GET","urlPath":"/upptag/U-3"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-33","personId":"19900909-3333","namn":"Cia Carlsson"}}}]}
-```
-
-**`demo/tjanst-z/mappings/upptag.json`**
-
-```json
-{"mappings":[{"request":{"method":"GET","urlPath":"/upptag/U-1"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-1","personId":"19800101-1111","namn":"Anna Andersson"}}},{"request":{"method":"GET","urlPath":"/upptag/U-2"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-2","personId":"19750505-9999","namn":"Bo Berg"}}},{"request":{"method":"GET","urlPath":"/upptag/U-3"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"upptagsId":"U-3","personId":"19900909-3333","namn":"Cia Carlsson"}}}]}
-```
-
-## Steg 9 – Kontrollera att allt fungerar
+Appen har startat när loggen visar `Started AvstamningsApplicationKt`. Kontrollera:
 
 ```bash
-./mvnw clean package
-cp .env.example .env && docker compose up -d
-set -a; source .env; set +a; ./mvnw spring-boot:run
-# i en ny terminal:
-docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < demo/lagg-till-uppdrag.sql
-sleep 10; curl localhost:8080/api/felkoder
+curl localhost:8080/api/felkoder
 ```
 
-Rätt resultat är exakt tre felkoder:
+Svaret ska vara `[]` (inga felkoder ännu).
 
-| kallreferens | tjanst | kodNummer |
-| --- | --- | --- |
-| B-2 | TJANST_Y | 3 |
-| B-2 | TJANST_Z | 2 |
-| C-3 | TJANST_Y | 1 |
-
-Alla tre poster i `que` ska ha status `KLART`.
+Källsystemens och tjänsternas adresser står under `upptagskontroll.kallsystem` och `upptagskontroll.tjanster` i `application.yml`. Utan nåbara system blir köposter `MISSLYCKAT`; appen fortsätter ändå att köra.
