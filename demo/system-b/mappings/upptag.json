@@ -1,0 +1,31 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "GET",
+        "urlPath": "/records",
+        "queryParameters": {
+          "recordId": {
+            "equalTo": "B-2"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "recordId": "B-2",
+          "uptake": {
+            "id": "U-2"
+          },
+          "subject": {
+            "personalNumber": "19750505-2222",
+            "fullName": "Bo Berg"
+          }
+        }
+      }
+    }
+  ]
+}

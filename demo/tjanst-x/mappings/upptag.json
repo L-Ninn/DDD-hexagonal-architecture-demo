@@ -1,0 +1,55 @@
+{
+  "mappings": [
+    {
+      "request": {
+        "method": "GET",
+        "urlPath": "/upptag/U-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "upptagsId": "U-1",
+          "personId": "19800101-1111",
+          "namn": "Anna Andersson"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "urlPath": "/upptag/U-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "upptagsId": "U-2",
+          "personId": "19750505-2222",
+          "namn": "Bo Berg"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "urlPath": "/upptag/U-3"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "upptagsId": "U-3",
+          "personId": "19900909-3333",
+          "namn": "Cia Carlsson"
+        }
+      }
+    }
+  ]
+}

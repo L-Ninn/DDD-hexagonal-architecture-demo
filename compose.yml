@@ -36,5 +36,26 @@ services:
     volumes:
       - ./demo/system-c/mappings:/home/wiremock/mappings:ro
 
+  tjanst-x:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${TJANST_X_PORT:-8084}:8080"
+    volumes:
+      - ./demo/tjanst-x/mappings:/home/wiremock/mappings:ro
+
+  tjanst-y:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${TJANST_Y_PORT:-8085}:8080"
+    volumes:
+      - ./demo/tjanst-y/mappings:/home/wiremock/mappings:ro
+
+  tjanst-z:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "127.0.0.1:${TJANST_Z_PORT:-8086}:8080"
+    volumes:
+      - ./demo/tjanst-z/mappings:/home/wiremock/mappings:ro
+
 volumes:
   felkoder-data:

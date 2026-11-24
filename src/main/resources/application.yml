@@ -24,13 +24,18 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
-avstamning:
-  fixed-delay: ${AVSTAMNING_FIXED_DELAY:PT30S}
-  initial-delay: ${AVSTAMNING_INITIAL_DELAY:PT5S}
+upptagskontroll:
+  fixed-delay: ${UPPTAGSKONTROLL_FIXED_DELAY:PT30S}
+  initial-delay: ${UPPTAGSKONTROLL_INITIAL_DELAY:PT5S}
+  antal-per-korning: ${UPPTAGSKONTROLL_ANTAL_PER_KORNING:10}
   http:
     connect-timeout: ${HTTP_CONNECT_TIMEOUT:PT2S}
     read-timeout: ${HTTP_READ_TIMEOUT:PT3S}
-  kallor:
+  kallsystem:
     system-a-url: ${SYSTEM_A_URL:http://localhost:8081}
     system-b-url: ${SYSTEM_B_URL:http://localhost:8082}
     system-c-url: ${SYSTEM_C_URL:http://localhost:8083}
+  tjanster:
+    tjanst-x-url: ${TJANST_X_URL:http://localhost:8084}
+    tjanst-y-url: ${TJANST_Y_URL:http://localhost:8085}
+    tjanst-z-url: ${TJANST_Z_URL:http://localhost:8086}

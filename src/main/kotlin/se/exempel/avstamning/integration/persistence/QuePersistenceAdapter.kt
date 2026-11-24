@@ -1,37 +1,32 @@
 package se.exempel.avstamning.integration.persistence
 
+import org.springframework.data.domain.Limit
 import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
-import se.exempel.avstamning.app.port.Avstamningsko
-import se.exempel.avstamning.app.port.Avvikelselagring
-import se.exempel.avstamning.domain.Avstamningsuppdrag
-import se.exempel.avstamning.domain.RegistreradFelkod
+import se.exempel.avstamning.app.port.Kontrollko
+import se.exempel.avstamning.domain.Kontrolluppdrag
 import java.util.UUID
 
 @Repository
 class QuePersistenceAdapter(
     private val repository: QueRepository,
-    private val mapper: QueMapper,
-    private val avvikelselagring: Avvikelselagring,
-) : Avstamningsko {
+) : Kontrollko {
     @Transactional(readOnly = true)
-    override fun hamtaNasta(): Avstamningsuppdrag? =
-        repository.findFirstByStatusOrderByTimestampAscIdAsc(QueStatus.VANTAR)?.let(mapper::tillUppdrag)
+    override fun hamtaVantande(antal: Int): List<Kontrolluppdrag> =
+        repository.findByStatusOrderByTimestampAscIdAsc(QueStatus.VANTAR, Limit.of(antal))
+            .map(QueEntity::tillUppdrag)
 
     @Transactional
-    override fun slutfor(uppdragId: UUID, felkoder: List<RegistreradFelkod>) {
-        val entity = hamtaVantande(uppdragId)
-        avvikelselagring.spara(felkoder)
-        entity.status = QueStatus.KLART
+    override fun markeraKlart(uppdragId: UUID) {
+        andraStatus(uppdragId, QueStatus.KLART)
     }
 
     @Transactional
     override fun markeraMisslyckat(uppdragId: UUID) {
-        hamtaVantande(uppdragId).status = QueStatus.MISSLYCKAT
+        andraStatus(uppdragId, QueStatus.MISSLYCKAT)
     }
 
-    private fun hamtaVantande(uppdragId: UUID): QueEntity =
-        checkNotNull(repository.findByIdAndStatus(uppdragId, QueStatus.VANTAR)) {
-            "Uppdraget $uppdragId saknas eller är redan avslutat"
-        }
+    private fun andraStatus(uppdragId: UUID, status: QueStatus) {
+        repository.findById(uppdragId).orElseThrow().status = status
+    }
 }
