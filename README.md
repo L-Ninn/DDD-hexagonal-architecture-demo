@@ -160,3 +160,170 @@ Demotjänsten ska köras i **en instans**. Schemaläggaren använder en tråd oc
 Java 21, Spring Boot 3.5.7, Kotlin 1.9.25 (Boots dependency management), MapStruct 1.6.3 med kapt, Hibernate 6.6.33.Final, Liquibase 4.31.1, PostgreSQL 17.6 och WireMock 3.13.2. Spring Boot hanterar Kotlin-, Hibernate-, Liquibase- och JDBC-versionerna. Kotlin-kompilatorns Spring/JPA-plugins öppnar ramverksklasser och skapar JPA-konstruktorn; domänens dataklasser är immutabla. Endast MapStructs genererade implementationer är Java-kod.
 
 Versions- och konfigurationsunderlag: [Spring Boot 3.5.7](https://spring.io/blog/2025/10/23/spring-boot-3-5-7-available-now/), [Spring Boots Kotlin-stöd](https://docs.spring.io/spring-boot/3.5/reference/features/kotlin.html), [Liquibase med Spring Boot](https://docs.spring.io/spring-boot/3.5/how-to/data-initialization.html#howto.data-initialization.migration-tool.liquibase), [Kotlin kapt med Maven](https://kotlinlang.org/docs/kapt.html), [MapStruct 1.6.3](https://mapstruct.org/documentation/stable/reference/html/), [PostgreSQL 17 constraints](https://www.postgresql.org/docs/17/ddl-constraints.html) och [WireMock i Docker](https://wiremock.org/docs/standalone/docker/).
+
+## AI-prompt för att återskapa projektet
+
+<details>
+<summary>Visa och kopiera prompten</summary>
+
+Prompten är fristående och beskriver ett projekt med motsvarande struktur och beteende. Den är inte en garanti för identisk källkod.
+
+```text
+Skapa ett komplett, körbart demoprojekt för avstämning av kunduppgifter från
+tre externa system. Implementera alla filer, inte enbart en arkitekturskiss.
+Följ specifikationen nedan och håll koden liten, tydlig och idiomatisk.
+
+Språk och teknik
+- Skriv dokumentation och förklaringar på svenska. Använd svenska domännamn
+  utan å, ä och ö i identifierare. Behåll engelska standardtermer och suffix
+  som Entity, Repository, Mapper, Client, Controller och Service.
+- Använd Kotlin 1.9.25, Java 21 och Spring Boot 3.5.7.
+- Använd Maven, Maven Wrapper 3.3.4 och Maven 3.9.11. Projektets koordinater
+  är se.exempel:avstamning:0.0.1-SNAPSHOT och baspaketet se.exempel.avstamning.
+- Använd Spring MVC, RestClient, Spring Data JPA/Hibernate, PostgreSQL och
+  Liquibase. Spring Boot ska hantera beroendeversionerna där det är möjligt.
+- Använd MapStruct 1.6.3 med kapt, componentModel="spring" och
+  unmappedTargetPolicy=ERROR. Mappa externa DTO:er till domänobjekt, mellan
+  domän och JPA-entities samt från domän till API-response.
+- Konfigurera Kotlin-plugins för Spring, JPA och all-open för JPA-typer.
+  Använd vanliga klasser för JPA-entities och immutabla domänobjekt.
+  Kör kapt före Kotlin-kompilering och kompilera genererad Java-kod därefter.
+- Skapa inga tester eller testberoenden. Sätt maven.test.skip=true i POM.
+
+Arkitektur och klasser
+- Använd DDD och hexagonal arkitektur med huvudpaketen api, app, domain
+  och integration. Domänen ska vara fri från Spring, JPA och MapStruct.
+  App-services ska vara vanliga Kotlin-klasser med constructor injection.
+- api/controller: FelkodController.
+- api/dto: FelkodResponse och FelkodResponseMapper.
+- app/service: AvstamningsService och FelkodService. Services ska ha suffixet
+  Service. Orkestrering hör hit; jämförelseregler hör till domänobjekten.
+- app/scheduler: AvstamningsScheduler, en tunn @Scheduled-komponent vars
+  metod bara anropar avstamningsService.stamAv() utan argument.
+- app/config: ApplicationConfig för explicit wiring, @EnableScheduling,
+  Clock.systemUTC(), RestClient-klienter och trådpool; AvstamningsProperties
+  för validerad, typad konfiguration av schema, URL:er och timeouter.
+- app/port: Underlagshamtning, Avstamningsko, Avvikelselagring, FelkodQueryPort.
+- domain: Avstamningsuppdrag, Kallunderlag, Kallsystem, Hamtningsresultat,
+  Underlagsproblem, Jamforelse, Jamforelseresultat, Jamforelsefalt, Avvikelse,
+  Felkod och RegistreradFelkod. Relaterade typer får dela Kotlin-fil.
+- integration/systema, systemb och systemc: respektive SystemAClient,
+  SystemBClient, SystemCClient med Response-DTO:er och MapStruct-mappers.
+  Lägg gemensam översättning av HTTP-fel i integration/Underlagsanrop.kt.
+- integration/persistence: FelkodEntity, FelkodRepository,
+  FelkodPersistenceMapper, AvvikelsePersistenceAdapter, QueEntity, QueStatus,
+  QueRepository, QueMapper och QuePersistenceAdapter.
+- Låt ports uttrycka appens behov. HTTP-DTO:er och JPA-entities får inte
+  passera in i domänen. Använd inga extra abstraktionslager utan behov.
+
+Jobbet och kön
+- Workern ska inte skicka kundnummer, läsa databasen eller hantera resultat.
+  Kundreferensen ska inte vara hårdkodad eller finnas i appkonfigurationen.
+- AvstamningsService.stamAv() läser högst ett uppdrag från tabellen que:
+  den äldsta posten med status VANTAR, sorterad på timestamp och sedan id.
+  Tom kö ger null och inga externa anrop.
+- Avstamningsuppdrag innehåller id och affarsreferens. Uppdragets id används
+  som Jamforelse.id och som jamforelseId i alla tillhörande felregistreringar.
+- Underlagshamtning har systemId och hamta(affarsreferens).
+  Konfigurera exakt en hämtare för vart och ett av SYSTEM_A, SYSTEM_B, SYSTEM_C.
+- Starta alla tre anrop parallellt för samma kund via en separat
+  ExecutorService med tre trådar. Låt Spring äga och stänga trådpoolen.
+  Använd invokeAll med Callable och invänta alla resultat före jämförelsen.
+- Låt Jamforelse.jamfor avgöra utfallet. Servicen sparar resultatet och
+  returnerar Jamforelseresultat. Lägg ingen egen resultatlogger,
+  loggaResultat-metod eller generell try/catch i servicen.
+  Låt oväntade fel och InterruptedException gå vidare till anroparen.
+- Avstamningsko erbjuder hamtaNasta(), slutfor(uppdragId, felkoder) och
+  markeraMisslyckat(uppdragId). Avvikelselagring erbjuder spara(felkoder).
+  FelkodQueryPort erbjuder hamtaAlla().
+- LIKA och OLIKA ger köstatus KLART. OFULLSTANDIGT ger MISSLYCKAT och inga
+  nya felkoder. Avslutade uppdrag väljs inte igen; ett nytt försök köas som
+  en ny rad. Oväntade fel före commit lämnar uppdraget VANTAR.
+- Läs kön i en kort transaktion som avslutas före HTTP-anropen. Vid slutförande
+  ska QuePersistenceAdapter låsa den väntande köposten med PESSIMISTIC_WRITE
+  och spara felkoder samt status KLART atomiskt i samma transaktion.
+  Avvikelselagrings transaktion ansluter till den pågående transaktionen.
+  Inga databastransaktioner eller lås får hållas under HTTP-anropen.
+- Kör demon i en instans. Schemaläggaren har en tråd, initialDelay PT5S
+  och fixedDelay PT30S. Köposten reserveras inte före HTTP-hämtningen;
+  dokumentera begränsningen för flera repliker och att ett kvarstående
+  tekniskt fel på äldsta posten kan blockera senare uppdrag.
+
+Domänregler
+- Samma kund identifieras av en gemensam affarsreferens. Varje system har
+  dessutom ett eget lokalt refId. Kallunderlag innehåller systemId, refId,
+  affarsreferens, namn och epost. Obligatoriska strängar får inte vara blanka.
+- Jämför endast namn och epost med exakt stränglikhet, utan normalisering.
+  Alla tre system måste finnas och avse samma kund. Lokala id:n jämförs inte.
+- Använd sealed types för tillgängligt/ofullständigt hämtresultat och för
+  jämförelseutfallen Lika, Olika och Ofullstandigt.
+- Om ett fält skiljer sig skapas en Avvikelse per involverat system för
+  det fältet, alltså tre poster. Ingen källa är facit, även om två är lika.
+  Avvikelse bestämmer felkoden AVVIKANDE_FALT; fältet är NAMN eller EPOST.
+- Alla felregistreringar för uppdraget får samma tidsstämpel från Clock,
+  men egna UUID:n som id. Spara aldrig själva namn- eller e-postvärdena.
+- Saknat underlag, 404, andra HTTP-fel, timeout, tomt svar, ogiltigt svar
+  eller fel kundreferens ska ge Ofullstandigt. Använd Underlagsproblem med
+  SAKNAS, HTTP_FEL, ANROPSFEL, OGILTIGT_FORMAT och FEL_AFFARSREFERENS.
+  Jämför inte bara de två kvarvarande källorna när den tredje saknas.
+
+De tre externa kontrakten
+- A: GET /customers/{kundnummer}; JSON-fält id, customerNumber, name, email.
+- B: GET /records?customerNumber={kundnummer}; JSON-fält recordId och
+  customer med number, displayName och contact.emailAddress.
+  Modellera de nästlade objekten med SystemBCustomer och SystemBContact.
+- C: GET /customer-data/{kundnummer}; JSON-fält local_reference,
+  business_reference, full_name, email_address. Använd @JsonProperty för
+  dessa fält och camelCase i Kotlin.
+- Mappa alla tre till samma Kallunderlag och behåll system och lokalt refId.
+  HTTP-klienterna ska finnas i integration, med två sekunders anslutningstimeout
+  och tre sekunders lästimeout. Inga automatiska HTTP-återförsök.
+
+Databas och API
+- Databasen heter felkoder. Använd Liquibase med masterfilen
+  db/changelog/db.changelog-master.yaml och två inkluderade SQL-changesets:
+  changes/001-skapa-felkoder.sql och changes/002-skapa-que.sql.
+- Tabell felkoder: id UUID primary key, kod VARCHAR(40), system_id VARCHAR(20),
+  ref_id TEXT, jamforelse_id UUID, affarsreferens TEXT, falt VARCHAR(20),
+  timestamp TIMESTAMPTZ. Alla kolumner är NOT NULL.
+  Lägg CHECK-villkor för tillåtna kod-, system- och fältvärden samt icke-blanka
+  ref_id och affarsreferens. Lägg UNIQUE på (jamforelse_id, falt, system_id)
+  och index på (timestamp DESC, id ASC).
+- Tabell que: id UUID primary key default gen_random_uuid(), affarsreferens
+  TEXT NOT NULL, status VARCHAR(20) NOT NULL default 'VANTAR', timestamp
+  TIMESTAMPTZ NOT NULL default CURRENT_TIMESTAMP. Tillåt status VANTAR,
+  KLART och MISSLYCKAT. Validera icke-blank affarsreferens och lägg index på
+  (status, timestamp, id). Kön är tom tills någon lägger in ett uppdrag.
+- Använd ddl-auto=validate, open-in-view=false och UTC för JDBC-tidsstämplar.
+- GET /api/felkoder ska via FelkodService returnera alla sparade felkoder,
+  sorterade timestamp fallande och id stigande, med 200 OK och [] vid tomt
+  resultat. Ingen paginering och ingen autentisering i denna lokala demo.
+- FelkodResponse innehåller id, kod, systemId, refId, jamforelseId,
+  affarsreferens, falt och timestamp. Läsningen startar ingen jämförelse.
+
+Körbar demo och leverans
+- Skapa compose.yml med postgres:17.6-alpine och tre separata
+  wiremock/wiremock:3.13.2 på port 8081, 8082 och 8083. PostgreSQL använder
+  port 5432 och en namngiven volym. Bind infrastrukturportarna till localhost.
+- Lägg WireMock-filerna under demo/system-a/mappings, demo/system-b/mappings
+  och demo/system-c/mappings. Skapa tre scenarier:
+  KUND-100: samma namn, annan e-post i C => OLIKA, tre felrader för EPOST.
+  KUND-200: samma namn/e-post, olika lokala id:n => LIKA, inga felrader.
+  KUND-300: C svarar 404, A/B har olika namn => OFULLSTANDIGT, inga felrader.
+- Skapa demo/lagg-till-uppdrag.sql som lägger in dessa tre kundreferenser i que.
+- Läs DATABASE_URL, POSTGRES_USER och POSTGRES_PASSWORD från miljön.
+  Använd jdbc:postgresql://localhost:5432/felkoder och avstamning som default
+  för URL respektive användare. Lösenord måste anges.
+- Stöd SYSTEM_A_URL, SYSTEM_B_URL, SYSTEM_C_URL, SERVER_PORT,
+  AVSTAMNING_FIXED_DELAY, AVSTAMNING_INITIAL_DELAY, HTTP_CONNECT_TIMEOUT och
+  HTTP_READ_TIMEOUT. Applikationen använder port 8080 som default.
+- Leverera .env.example med enbart lokala demovärden. Ignorera .env,
+  target och IDE-filer i Git. Leverera mvnw, mvnw.cmd och wrapperkonfiguration.
+- Skriv en svensk README med arkitektur, domänantaganden, köstatus,
+  startinstruktioner, curl-exempel och INSERT INTO que för en specifik kund.
+- Bygg med ./mvnw clean package utan tester. Redovisa verkligt byggresultat
+  och skilj kompilering från verifiering av HTTP, schemaläggning och databas.
+  Påstå inte att ett beteende har verifierats om det inte har körts.
+```
+
+</details>
