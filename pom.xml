@@ -13,7 +13,7 @@
     <artifactId>avstamning</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>Avstamning</name>
-    <description>Avstamning av kunduppgifter fran tre externa system</description>
+    <description>Upptagskontroll mot kallsystem och tre tjanster</description>
     <properties>
         <java.version>21</java.version>
         <mapstruct.version>1.6.3</mapstruct.version>
